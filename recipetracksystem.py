@@ -57,6 +57,9 @@ class Ingredient:
     unit: str
     quantity: Quantity
 
+    def __str__(self):
+        return f"{self.quantity} {self.unit} {self.name}"
+
 
 class IngredientParser:
     def parse(self, raw_data):
@@ -81,7 +84,7 @@ class IngredientParser:
 
         for ingredient in ingredients.copy():
             yield Ingredient(
-                ingredient[0], ingredient[1], " ".join(ingredient[1:])
+                " ".join(ingredient[2:]), ingredient[1], ingredient[0]
             )
         return ingredients
 
@@ -124,11 +127,4 @@ class IngredientParser:
 
 
 if __name__ == "__main__":
-    with open("data/test_data") as f:
-        lines = f.readlines()
-
-    test_case = lines[3:50]
-    parser = IngredientParser()
-    ingredients = parser.parse(" ".join(test_case))
-    for ingredient, line in zip(ingredients, test_case):
-        print(line.strip(), "=>", ingredient)
+    pass
