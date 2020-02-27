@@ -6,6 +6,7 @@ Provides a version control system that specializes for foods
 import ast
 import unicodedata
 from contextlib import suppress
+from functools import lru_cache
 
 
 class ConstantMerger(ast.NodeTransformer):
@@ -34,6 +35,9 @@ class ConstantMerger(ast.NodeTransformer):
 
         return node
 
+    def visit_Tuple(self, node):
+        return "(" + ",".join(map(str, node.elts)) + ")"
+
 
 QUANTITY_PARSERS = (
     ast.literal_eval,  # can handle integers, floats
@@ -50,8 +54,15 @@ class IngredientParser:
         ingredients = []
         current_ingredient = []
 
+        self.merge_quantities(tokens)
+
         for token in tokens:
-            if self.parse_quantity(token) and len(current_ingredient) > 0:
+            if (
+                self.parse_quantity(token)
+                is not None  # we saw a new quantitiy
+                and len(current_ingredient)
+                > 0  # and there are some ingredients in the current buffer
+            ):
                 ingredients.append(current_ingredient.copy())
                 current_ingredient.clear()
             current_ingredient.append(token)
@@ -61,6 +72,18 @@ class IngredientParser:
 
         return ingredients
 
+    def merge_quantities(self, tokens):
+        offset = 0
+        for n, token in enumerate(tokens.copy()):
+            n -= offset
+            if (
+                self.parse_quantity(token) is not None
+                and self.parse_quantity(tokens[n + 1]) is not None
+            ):
+                tokens[n] = f"({tokens[n]}, {tokens.pop(n + 1)})"
+                offset += 1
+
+    @lru_cache
     def parse_quantity(self, quantity):
         for parser in QUANTITY_PARSERS:
             try:
