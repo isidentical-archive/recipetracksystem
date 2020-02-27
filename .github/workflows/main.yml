@@ -1,0 +1,33 @@
+name: CI
+
+on: [push]
+
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        python: [3.8, 3.9]
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Setup python
+      run: |
+        sudo add-apt-repository ppa:deadsnakes
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends python${{ matrix.python }}
+
+    - name: Setup testing deps
+      run: |
+        python${{ matrix.python }} -m pip install setuptools
+        python${{ matrix.python }} -m pip install -r requirements-dev.txt
+
+    - name: Build
+      run: |
+        python${{ matrix.python }} -m pip install -e .
+
+    - name: Test
+      run: |
+        python${{ matrix.python }} -m pytest
