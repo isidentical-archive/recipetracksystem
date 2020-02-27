@@ -54,14 +54,13 @@ class IngredientParser:
         ingredients = []
         current_ingredient = []
 
+        self.merge_parens(tokens)
         self.merge_quantities(tokens)
 
         for token in tokens:
             if (
-                self.parse_quantity(token)
-                is not None  # we saw a new quantitiy
-                and len(current_ingredient)
-                > 0  # and there are some ingredients in the current buffer
+                self.parse_quantity(token) is not None
+                and len(current_ingredient) > 0
             ):
                 ingredients.append(current_ingredient.copy())
                 current_ingredient.clear()
@@ -73,6 +72,7 @@ class IngredientParser:
         return ingredients
 
     def merge_quantities(self, tokens):
+        # e.g: 10 1/2 lettuces
         offset = 0
         for n, token in enumerate(tokens.copy()):
             n -= offset
@@ -82,6 +82,23 @@ class IngredientParser:
             ):
                 tokens[n] = f"({tokens[n]}, {tokens.pop(n + 1)})"
                 offset += 1
+
+    def merge_parens(self, tokens):
+        # e.g: 1 (16 oz) box pasta
+        start = None
+        parentheses = []
+        for n, token in enumerate(tokens.copy()):
+            if token.startswith("("):
+                start = n
+            elif start is not None and token.endswith(")"):
+                parentheses.append((start, n + 1))
+                start = None
+
+        offset = 0
+        for start, end in parentheses:
+            matched_tokens = slice(start - offset, end - offset)
+            tokens[matched_tokens] = (" ".join(tokens[matched_tokens]),)
+            offset += end - start - 1
 
     @lru_cache
     def parse_quantity(self, quantity):
