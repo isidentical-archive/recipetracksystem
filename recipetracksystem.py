@@ -2,11 +2,14 @@
 
 Provides a version control system that specializes for foods
 """
+from __future__ import annotations
 
 import ast
 import unicodedata
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import Union
 
 
 class ConstantMerger(ast.NodeTransformer):
@@ -48,6 +51,13 @@ QUANTITY_PARSERS = (
 QUANTITY_PARSER_ERRORS = (ValueError, TypeError, SyntaxError)
 
 
+@dataclass
+class Ingredient:
+    name: str
+    unit: str
+    quantity: Quantity
+
+
 class IngredientParser:
     def parse(self, raw_data):
         tokens = raw_data.split()
@@ -69,6 +79,10 @@ class IngredientParser:
         else:
             ingredients.append(current_ingredient.copy())
 
+        for ingredient in ingredients.copy():
+            yield Ingredient(
+                ingredient[0], ingredient[1], " ".join(ingredient[1:])
+            )
         return ingredients
 
     def merge_quantities(self, tokens):
