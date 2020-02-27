@@ -4,12 +4,15 @@ Provides a version control system that specializes for foods
 """
 from __future__ import annotations
 
+import argparse
 import ast
+import json
 import unicodedata
 from contextlib import suppress
-from dataclasses import dataclass
-from functools import lru_cache
-from typing import Union
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from functools import lru_cache, partial
+from pathlib import Path
 
 
 class ConstantMerger(ast.NodeTransformer):
@@ -126,5 +129,60 @@ class IngredientParser:
                 continue
 
 
+def general_serializer(obj):
+    if isinstance(obj, datetime):
+        return str(obj)
+
+
+json.dump = partial(json.dump, default=general_serializer)
+
+
+@dataclass
+class Metadata:
+    name: str
+    creation_date: datetime = field(default_factory=datetime.now)
+
+
+def create_repo(path, name, update=False):
+    rts = path / ".rts"
+    rts.mkdir(exist_ok=update)
+
+    metadata = Metadata(name)
+    with open(rts / "metadata", "w") as f:
+        json.dump(asdict(metadata), f)
+
+
+def main():
+    options = parse_args()
+    run_args(options)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="action")
+    command_groups = {}
+
+    for subparser in ["init"]:
+        command_groups[subparser] = subparsers.add_parser(subparser)
+
+    command_groups["init"].add_argument("name")
+    command_groups["init"].add_argument(
+        "--update", action="store_true", default=False
+    )
+
+    options = parser.parse_args()
+
+    if options.action is None:
+        parser.print_help()
+        raise SystemExit(1)
+
+    return options
+
+
+def run_args(options):
+    if options.action == "init":
+        create_repo(path=Path(), name=options.name, update=options.update)
+
+
 if __name__ == "__main__":
-    pass
+    main()
