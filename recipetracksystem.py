@@ -6,13 +6,17 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
+import os
 import unicodedata
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import lru_cache, partial
 from pathlib import Path
+
+DEFAULT_BRANCH = "main"
 
 
 class ConstantMerger(ast.NodeTransformer):
@@ -129,27 +133,71 @@ class IngredientParser:
                 continue
 
 
-def general_serializer(obj):
-    if isinstance(obj, datetime):
-        return str(obj)
+def as_md5(name):
+    hash_obj = hashlib.md5(name.encode())
+    return hash_obj.hexdigest()
 
 
-json.dump = partial(json.dump, default=general_serializer)
+json.dump = partial(json.dump, default=str)
+
+
+@lru_cache
+def _get_base_dir():
+    path = Path(os.environ.get("XDG_CACHE_HOME", "~/.cache"))
+    path = path.expanduser() / "recipetracksystem"
+    if not path.exists():
+        path.mkdir()
+    return path
+
+
+@dataclass
+class Session:
+    recipe: str
 
 
 @dataclass
 class Metadata:
     name: str
+    branch: str = DEFAULT_BRANCH
     creation_date: datetime = field(default_factory=datetime.now)
 
 
-def create_repo(path, name, update=False):
-    rts = path / ".rts"
-    rts.mkdir(exist_ok=update)
+def read_session():
+    path = _get_base_dir() / "session.json"
+    if path.exists():
+        with open(path) as f:
+            session = json.load(f)
+        return Session(**session)
+    else:
+        raise ValueError("No session file has been created!")
+
+
+def update_session(**kwargs):
+    path = _get_base_dir() / "session.json"
+    if path.exists():
+        with open(path) as f:
+            session = json.load(f)
+    else:
+        session = asdict(Session(**kwargs))
+    session.update(kwargs)
+    with open(path, "w") as f:
+        json.dump(session, f)
+
+
+def create_repo(name, update=False):
+    path = _get_base_dir() / as_md5(name)
+    path.mkdir(exist_ok=update)
 
     metadata = Metadata(name)
-    with open(rts / "metadata", "w") as f:
+    with open(path / "metadata.json", "w") as f:
         json.dump(asdict(metadata), f)
+    update_session(recipe=name)
+
+
+def add(raw_ingredients):
+    parser = IngredientParser()
+    ingredients = tuple(map(asdict, parser.parse(" ".join(raw_ingredients))))
+    print(ingredients)
 
 
 def main():
@@ -162,13 +210,17 @@ def parse_args():
     subparsers = parser.add_subparsers(dest="action")
     command_groups = {}
 
-    for subparser in ["init"]:
+    for subparser in ("create", "add", "recipe", "switch", "commit"):
         command_groups[subparser] = subparsers.add_parser(subparser)
 
-    command_groups["init"].add_argument("name")
-    command_groups["init"].add_argument(
+    command_groups["create"].add_argument("name")
+    command_groups["create"].add_argument(
         "--update", action="store_true", default=False
     )
+
+    command_groups["add"].add_argument("ingredients", nargs="+")
+
+    command_groups["switch"].add_argument("to")
 
     options = parser.parse_args()
 
@@ -180,8 +232,16 @@ def parse_args():
 
 
 def run_args(options):
-    if options.action == "init":
-        create_repo(path=Path(), name=options.name, update=options.update)
+    if options.action == "create":
+        create_repo(name=options.name, update=options.update)
+    elif options.action == "add":
+        add(raw_ingredients=options.ingredients)
+    elif options.action == "recipe":
+        print(read_session().recipe)
+    elif options.action == "switch":
+        update_session(recipe=options.to)
+    else:
+        raise ValueError("Unknown action!")
 
 
 if __name__ == "__main__":
